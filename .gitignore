@@ -1,0 +1,31 @@
+# ── Environment & secrets (NEVER commit) ────────────────────────────────────
+.env
+*.pfx
+*.cer
+.claude/
+# Console identity / account exports (serials, activation codes, dev account)
+ExportedSettings.txt
+devices_*.csv
+
+# ── Large / fetched artifacts (each dev provides their own) ──────────────────
+# ONNX model weights — pulled from Hugging Face per dev (see model-stage/README.md)
+xbprobe/model-stage/*
+!xbprobe/model-stage/README.md
+# Native runtime DLLs — restored from NuGet by Get-Dependencies.ps1
+xbprobe/xbprobe/redist/*.dll
+xbprobe/thirdparty/
+
+# ── Build output ────────────────────────────────────────────────────────────
+xbprobe/xbprobe/AppPackages/
+xbprobe/xbprobe/x64/
+xbprobe/xbprobe/Generated Files/
+**/Debug/
+**/Release/
+**/*.log
+xbprobe/probe-results.txt
+
+# ── Editor / OS noise ───────────────────────────────────────────────────────
+.vs/
+*.user
+Thumbs.db
+desktop.ini

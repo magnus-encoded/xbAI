@@ -1,0 +1,40 @@
+================ Xbox AI Capability Probe ================
+Goal: ask the actual console what the UWP 'game' container exposes.
+
+[DXGI] CreateDXGIFactory2: 0x00000000
+[DXGI] Adapter            : SraKmd_arden
+[DXGI] VendorId/DeviceId  : 1414 / d000
+[DXGI] DedicatedVideoMem  : 0.50 GiB
+[DXGI] DedicatedSystemMem : 0.00 GiB
+[DXGI] SharedSystemMem    : 4.00 GiB
+
+[D3D12] D3D12CreateDevice (FL 11_0): 0x00000000
+[D3D12] Max feature level : 11_0
+[D3D12] Highest shader model: 0x64
+[D3D12] UMA / CacheCoherentUMA: yes / yes
+
+[BUDGET] Local Budget     : 4.05 GiB  (CurrentUsage 0.00 GiB)
+[BUDGET] NonLocal Budget  : 0.00 GiB  (CurrentUsage 0.00 GiB)
+[BUDGET] >= 4 GiB available -> looks like the GAME memory profile.
+
+[DML] LoadLibrary(DirectML.dll)...
+[DML] NOT loadable in container. GetLastError=126
+
+[WinML] LearningModelDevice(DirectX)...
+[WinML] Created. AdapterId.LowPart=0
+
+================ Summary (status bits = 0x17) ================
+  DXGI adapter      : OK
+  D3D12 device      : OK
+  >=4GiB budget     : OK
+  DirectML device   : FAIL
+  WinML DirectX dev : OK
+
+================ T3: LAN inbound serving reachability ================
+[T3] manifest capability declared: privateNetworkClientServer
+[T3] StreamSocketListener created
+[T3] BindServiceNameAsync("8080"): OK  (LocalPort=8080)
+[T3] inbound listener UP. From the dev PC: curl http://192.168.1.233:8080/
+--- connection log (live-updated as inbound requests arrive) ---
+[conn #1] from 192.168.1.214:54797  req="GET / HTTP/1.1"  -> 200 OK (120 bytes)
+[conn #2] from 192.168.1.214:54802  req="GET /v1/models HTTP/1.1"  -> 200 OK (120 bytes)

@@ -1,0 +1,9 @@
+# Normalize text line endings; keep Windows-script and binary files sane.
+* text=auto eol=lf
+*.ps1   text eol=crlf
+*.sln   text eol=crlf
+*.vcxproj      text eol=crlf
+*.vcxproj.filters text eol=crlf
+*.png   binary
+*.pfx   binary
+*.cer   binary

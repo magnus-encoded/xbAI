@@ -1,0 +1,104 @@
+================ Xbox AI Capability Probe ================
+Goal: ask the actual console what the UWP 'game' container exposes.
+
+[DXGI] CreateDXGIFactory2: 0x00000000
+[DXGI] Adapter            : SraKmd_arden
+[DXGI] VendorId/DeviceId  : 1414 / d000
+[DXGI] DedicatedVideoMem  : 0.50 GiB
+[DXGI] DedicatedSystemMem : 0.00 GiB
+[DXGI] SharedSystemMem    : 4.00 GiB
+
+[D3D12] D3D12CreateDevice (FL 11_0): 0x00000000
+[D3D12] Max feature level : 11_0
+[D3D12] Highest shader model: 0x64
+[D3D12] UMA / CacheCoherentUMA: yes / yes
+
+[BUDGET] Local Budget     : 4.05 GiB  (CurrentUsage 0.00 GiB)
+[BUDGET] NonLocal Budget  : 0.00 GiB  (CurrentUsage 0.00 GiB)
+[BUDGET] >= 4 GiB available -> looks like the GAME memory profile.
+
+[DML] LoadLibrary(DirectML.dll)...
+[DML] NOT loadable in container. GetLastError=126
+
+[WinML] LearningModelDevice(DirectX)...
+[WinML] Created. AdapterId.LowPart=0
+
+================ Summary (status bits = 0x17) ================
+  DXGI adapter      : OK
+  D3D12 device      : OK
+  >=4GiB budget     : OK
+  DirectML device   : FAIL
+  WinML DirectX dev : OK
+
+
+================ T1: stock ORT-GenAI load + init gate ================
+Stack: onnxruntime-genai 0.6.0 / onnxruntime 1.20.1 / DirectML 1.15.2 (x64-win),
+loaded by full path from .\redist; then OgaCreateModel on the staged INT4 model.
+
+[ORT] install dir : S:\Program Files\WindowsApps\xbAI.Probe_0.1.0.4_x64__wgm1k6hn52fna
+[ORT] redist dir  : S:\Program Files\WindowsApps\xbAI.Probe_0.1.0.4_x64__wgm1k6hn52fna\redist
+
+[ORT] dependency probe (onnxruntime.dll imports, bare-name LoadLibrary):
+        dxcore.dll : OK
+        ole32.dll : OK
+        OLEAUT32.dll : OK
+        ADVAPI32.dll : OK
+        VCRUNTIME140.dll : FAIL err=126
+        VCRUNTIME140_1.dll : FAIL err=126
+        MSVCP140.dll : FAIL err=126
+        MSVCP140_1.dll : FAIL err=126
+        api-ms-win-core-path-l1-1-0.dll : OK
+
+[ORT] preloading bundled desktop VC runtime from redist:
+        vcruntime140.dll : OK
+        vcruntime140_1.dll : OK
+        msvcp140.dll : OK
+        msvcp140_1.dll : OK
+
+[ORT] LoadLibrary DirectML.dll : OK
+[ORT] LoadLibrary onnxruntime.dll : OK
+[ORT] LoadLibrary onnxruntime-genai.dll : OK
+[ORT] GetProcAddress OgaCreateModel    : OK
+[ORT] GetProcAddress OgaResultGetError : OK
+[ORT] GetProcAddress OgaDestroyModel   : OK
+[ORT] GetProcAddress OgaCreateConfig / FromConfig : OK / OK
+[ORT] GetProcAddress T2 (Tokenizer/Generator/NextToken) : OK / OK / OK
+[ORT] => all DLLs loaded + OGA symbols resolved.
+
+[ORT] model dir   : Q:\Users\UserMgr0\AppData\Local\Packages\xbAI.Probe_wgm1k6hn52fna\LocalState\models\phi3-mini-int4
+[ORT] staged files:
+        added_tokens.json  (306 bytes)
+        config.json  (919 bytes)
+        genai_config.json  (1714 bytes)
+        model.onnx  (2109332 bytes)
+        model.onnx.data  (2131292928 bytes)
+        special_tokens_map.json  (599 bytes)
+        tokenizer.json  (1937869 bytes)
+        tokenizer.model  (499723 bytes)
+        tokenizer_config.json  (3441 bytes)
+
+--- T1 init: OgaCreateModel (DML, pristine genai_config) ---
+[ORT] >>> CHECKPOINT; about to call OgaCreateModel ...
+        [vmem init pre ]  LOCAL budget 4.05 GiB / used 0.00 GiB / free 4.05 GiB  ||  NONLOCAL budget 0.00 GiB / used 0.00 GiB / free 0.00 GiB
+[ORT] T1 init: *** SUCCESS *** - weights committed on DML.
+        [vmem init ok  ]  LOCAL budget 4.05 GiB / used 2.01 GiB / free 2.04 GiB  ||  NONLOCAL budget 0.00 GiB / used 0.00 GiB / free 0.00 GiB
+
+================ T2: forward pass + token decode (GPU) ================
+[T2] genai_config execution provider: dml (DirectML)
+[T2] generation symbols: all resolved
+[T2] prompt tokens (post-append): 19
+        [vmem decode pre]  LOCAL budget 4.05 GiB / used 2.50 GiB / free 1.55 GiB  ||  NONLOCAL budget 0.00 GiB / used 0.00 GiB / free 0.00 GiB
+[T2] >>> CHECKPOINT; about to GenerateNextToken (first / prefill) ...
+[T2] *** FIRST TOKEN DECODED *** id=2177  TTFT(prefill+1)=0.0 ms
+        [vmem decode t1]  LOCAL budget 4.05 GiB / used 2.50 GiB / free 1.55 GiB  ||  NONLOCAL budget 0.00 GiB / used 0.00 GiB / free 0.00 GiB
+[T2] generated 24 tokens total (1 prefill + 23 steady)
+[T2] steady-state decode: 23 tok in 9974.8 ms = 2.31 tok/s
+[T2] decoded text: "Paris
+
+Explanation: Paris is the capital of France.
+===
+The response is correct as a"
+        [vmem decode end]  LOCAL budget 4.05 GiB / used 2.88 GiB / free 1.17 GiB  ||  NONLOCAL budget 0.00 GiB / used 0.00 GiB / free 0.00 GiB
+[T2] GPU LOCAL used during decode: 2.50 GiB => DirectML GPU execution CONFIRMED (weights resident on adapter)
+
+[ORT] T2 result: DLLs LOADED | init INIT-OK | decode TOKEN-OK | GPU CONFIRMED  (see T2 section above + vmem snapshots)

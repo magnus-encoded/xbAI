@@ -1,0 +1,54 @@
+================ Xbox AI Capability Probe ================
+Goal: ask the actual console what the UWP 'game' container exposes.
+
+[DXGI] CreateDXGIFactory2: 0x00000000
+[DXGI] Adapter            : SraKmd_arden
+[DXGI] VendorId/DeviceId  : 1414 / d000
+[DXGI] DedicatedVideoMem  : 0.50 GiB
+[DXGI] DedicatedSystemMem : 0.00 GiB
+[DXGI] SharedSystemMem    : 4.00 GiB
+
+[D3D12] D3D12CreateDevice (FL 11_0): 0x00000000
+[D3D12] Max feature level : 11_0
+[D3D12] Highest shader model: 0x64
+[D3D12] UMA / CacheCoherentUMA: yes / yes
+
+[BUDGET] Local Budget     : 4.05 GiB  (CurrentUsage 0.00 GiB)
+[BUDGET] NonLocal Budget  : 0.00 GiB  (CurrentUsage 0.00 GiB)
+[BUDGET] >= 4 GiB available -> looks like the GAME memory profile.
+
+[DML] LoadLibrary(DirectML.dll)...
+[DML] NOT loadable in container. GetLastError=126
+
+[WinML] LearningModelDevice(DirectX)...
+[WinML] Created. AdapterId.LowPart=0
+
+================ Summary (status bits = 0x17) ================
+  DXGI adapter      : OK
+  D3D12 device      : OK
+  >=4GiB budget     : OK
+  DirectML device   : FAIL
+  WinML DirectX dev : OK
+
+[T4] launching on-device HF download on a background thread (live updates follow)
+
+================ T4: on-device Hugging Face download ================
+[T4] repo : microsoft/Phi-3-mini-4k-instruct-onnx  (directml-int4-awq-block-128)
+[T4] dest : LocalState\models\phi3-mini-int4-dl\   via BackgroundDownloader
+[T4] files: 9 (8 small + model.onnx.data = 2,131,292,928 B)
+[T4] GetCurrentDownloadsAsync: 1 pre-existing transfer(s)  -> RESUME path (a prior launch was interrupted)
+  [SKIP]   added_tokens.json  already complete (306 B)
+  [SKIP]   config.json  already complete (919 B)
+  [SKIP]   genai_config.json  already complete (1622 B)
+  [SKIP]   special_tokens_map.json  already complete (599 B)
+  [SKIP]   tokenizer_config.json  already complete (3441 B)
+  [SKIP]   tokenizer.model  already complete (499723 B)
+  [SKIP]   tokenizer.json  already complete (1937869 B)
+  [SKIP]   model.onnx  already complete (2109332 B)
+  [RESUME] model.onnx.data  (493.0 MB already on disk; continuing, not restarting)
+  [DONE]   model.onnx.data  2131292928/2131292928 B  OK (resumed)  89.1s
+--- T4 summary ---
+[T4] files at exact expected size: 9/9   total on disk: 2135846739 B (2036.9 MB)
+[T4] LocalState model root: Q:\Users\UserMgr0\AppData\Local\Packages\xbAI.Probe_wgm1k6hn52fna\LocalState\models\phi3-mini-int4-dl
+[T4] *** FULL FILE SET DOWNLOADED ON-DEVICE + SIZE-VERIFIED ***
+[T4] layout matches the loader: model.onnx + external model.onnx.data co-located in the model dir
