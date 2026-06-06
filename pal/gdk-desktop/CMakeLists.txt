@@ -16,6 +16,9 @@ add_executable(xbai_gdk_desktop
     GdkSocketListener.cpp
     GdkModelStore.cpp
     GdkDownloader.cpp
+    GdkLifecycle.cpp
+    GdkInput.cpp
+    GdkDashboard.cpp
 )
 
 target_link_libraries(xbai_gdk_desktop PRIVATE xbai_core Winhttp)

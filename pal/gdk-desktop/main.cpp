@@ -1,24 +1,32 @@
 // pal/gdk-desktop/main.cpp
 // Entry point for the GameCore Win32 (Gaming.Desktop.x64) backend / dev-PC
-// harness. P0 walking skeleton: init runtime, bind a Winsock listener, accept
-// one connection, answer a canned HTTP 200, exit.
+// harness.  Wave-1 shell: full topology wired -- GdkLifecycle, GdkSocketListener,
+// GdkModelStore, GdkDownloader, GdkInput, GdkDashboard, StubInferenceEngine,
+// InferenceQueue, HttpServer.
 //
 // GDK note: the real GameCore entry is WinMain + XGameRuntimeInitialize() /
 // XGameRuntimeUninitialize(). The public PC GDK is not installed on this dev box
 // (no Gaming.Desktop.x64 platform / no XGameRuntime.h), so this builds against a
 // plain main() guarded by XBAI_HAVE_GDK. Flip the define (and link xgameruntime)
-// once the GDK is installed; the Winsock listener — the load-bearing part — is
+// once the GDK is installed; the Winsock listener -- the load-bearing part -- is
 // identical either way.
 
+#include "GdkDashboard.h"
+#include "GdkDownloader.h"
+#include "GdkInput.h"
+#include "GdkLifecycle.h"
 #include "GdkModelStore.h"
 #include "GdkSocketListener.h"
-#include "stubs.h"
+#include "StubInferenceEngine.h"
 
 #include "core.h"
+#include "queue/InferenceQueue.h"
+#include "server/HttpServer.h"
 
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <thread>
 
 #ifdef XBAI_HAVE_GDK
 #include <XGameRuntime.h>
@@ -45,31 +53,20 @@ uint16_t pick_port(int argc, char** argv) {
     return 8080;
 }
 
-// Drain the request line (best-effort) and write a canned HTTP/1.1 200.
-// This is the skeleton stand-in for core/server; it proves the seam end-to-end.
-void serve_canned_200(xbai::IConnection& conn) {
-    char buf[2048];
-    conn.read(buf, sizeof(buf));  // consume the request; content ignored in P0
-
-    static const char kResponse[] =
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/plain\r\n"
-        "Content-Length: 2\r\n"
-        "Connection: close\r\n"
-        "\r\n"
-        "OK";
-    conn.write(kResponse, sizeof(kResponse) - 1);
-}
-
 int run(int argc, char** argv) {
-    std::printf("xbai gdk-desktop skeleton — core_version=%d\n", xbai::core_version());
+    std::printf("xbai gdk-desktop shell -- core_version=%d\n", xbai::core_version());
 
+    // ---- Lifecycle -------------------------------------------------------
+    xbai::GdkLifecycle lifecycle;
+
+    // ---- Model store + downloader ----------------------------------------
     const std::string models_root = pick_models_root(argc, argv);
     xbai::GdkModelStore model_store(models_root);
+    xbai::GdkDownloader downloader;
     std::printf("model store root: %s\n", models_root.c_str());
 
+    // ---- Listener --------------------------------------------------------
     const uint16_t want_port = pick_port(argc, argv);
-
     xbai::GdkSocketListener listener;
     std::string error;
     if (!listener.listen(want_port, error)) {
@@ -77,20 +74,55 @@ int run(int argc, char** argv) {
         return 1;
     }
 
+    // ---- Input -----------------------------------------------------------
+    xbai::GdkInput input;
+    // Auto-fires once immediately on dev-PC (no physical gamepad).
+    input.set_activate_handler([]() {
+        std::printf("[xbai] activate intent received (auto-fire on dev-PC)\n");
+        std::fflush(stdout);
+    });
+
+    // ---- Dashboard -------------------------------------------------------
     xbai::GdkDashboard dashboard;
     xbai::DashboardStatus status;
-    status.state = xbai::ServerState::Ready;
+    status.state        = xbai::ServerState::Ready;
     status.endpoint_url = "http://127.0.0.1:" + std::to_string(listener.port());
     dashboard.set_status(status);
 
-    std::printf("listening on %s — accepting connections (Ctrl+C to quit)\n",
-                status.endpoint_url.c_str());
+    std::printf("listening on %s\n", status.endpoint_url.c_str());
     std::fflush(stdout);
 
-    // Skeleton accept loop: answer 200 on every connection.
-    listener.run([](std::unique_ptr<xbai::IConnection> conn) {
-        serve_canned_200(*conn);
+    // ---- Inference: stub engine + serializing queue ----------------------
+    xbai::StubInferenceEngine stub_engine;
+    xbai::InferenceQueue queue(stub_engine);
+
+    // ---- HTTP server -----------------------------------------------------
+    xbai::HttpServer http_server(listener, queue);
+
+    // Run the HTTP accept loop on a background thread so lifecycle.start() can
+    // block the main thread (mirroring how a real Xbox shell would work).
+    std::thread server_thread([&http_server]() {
+        http_server.serve();
     });
+
+    // Wire lifecycle callbacks (PLM transitions -- not fired on dev-PC, but
+    // correctly set up for the Xbox shell).
+    xbai::LifecycleCallbacks cbs;
+    cbs.on_suspend    = [&queue]()  { /* pause decode if needed */ (void)queue; };
+    cbs.on_resume     = [&queue]()  { /* resume decode */ (void)queue; };
+    cbs.on_constrain  = []() {};
+    cbs.on_unconstrain= []() {};
+    lifecycle.set_callbacks(cbs);
+
+    // Block until Ctrl+C / stop().  On dev-PC the process is killed by the user;
+    // listener.stop() + lifecycle.stop() would be called from a signal handler or
+    // a management thread in a production build.
+    lifecycle.start();
+
+    // Orderly shutdown.
+    listener.stop();
+    queue.shutdown();
+    if (server_thread.joinable()) server_thread.join();
 
     return 0;
 }

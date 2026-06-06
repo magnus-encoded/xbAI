@@ -129,6 +129,9 @@ void HttpServer::handle_connection(IConnection& conn) {
     // Route
     if (req.method == "POST" && req.path == "/v1/chat/completions") {
         handle_chat(conn, body);
+    } else if (req.method == "GET" && (req.path == "/" || req.path == "/health")) {
+        // Health check / root probe.
+        send_response(conn, 200, "OK", "text/plain", "OK");
     } else {
         send_404(conn);
     }
