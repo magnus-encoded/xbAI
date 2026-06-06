@@ -10,6 +10,7 @@
 // once the GDK is installed; the Winsock listener — the load-bearing part — is
 // identical either way.
 
+#include "GdkModelStore.h"
 #include "GdkSocketListener.h"
 #include "stubs.h"
 
@@ -24,6 +25,12 @@
 #endif
 
 namespace {
+
+// Pick the models root: argv[2] > default_root().
+std::string pick_models_root(int argc, char** argv) {
+    if (argc > 2 && argv[2] && argv[2][0] != '\0') return argv[2];
+    return xbai::GdkModelStore::default_root();
+}
 
 // Pick the listen port: argv[1] > XBAI_PORT env > default 8080.
 uint16_t pick_port(int argc, char** argv) {
@@ -56,6 +63,10 @@ void serve_canned_200(xbai::IConnection& conn) {
 
 int run(int argc, char** argv) {
     std::printf("xbai gdk-desktop skeleton — core_version=%d\n", xbai::core_version());
+
+    const std::string models_root = pick_models_root(argc, argv);
+    xbai::GdkModelStore model_store(models_root);
+    std::printf("model store root: %s\n", models_root.c_str());
 
     const uint16_t want_port = pick_port(argc, argv);
 

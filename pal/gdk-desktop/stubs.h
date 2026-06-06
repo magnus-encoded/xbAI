@@ -8,7 +8,6 @@
 #include "pal/IDownloader.h"
 #include "pal/IInput.h"
 #include "pal/ILifecycle.h"
-#include "pal/IModelStore.h"
 
 #include <cstdio>
 
@@ -23,15 +22,7 @@ public:
     void stop() override {}
 };
 
-// Model store stub: resolves nothing yet (no weights staged on the dev PC).
-class GdkModelStore : public IModelStore {
-public:
-    bool resolve(const std::string& model_id, ModelConfig&, std::string& error) override {
-        error = "GdkModelStore stub: model '" + model_id + "' not available (P0)";
-        return false;
-    }
-    std::vector<ModelFile> list_files(const std::string&) override { return {}; }
-};
+// GdkModelStore: real implementation in GdkModelStore.h / GdkModelStore.cpp.
 
 // Downloader stub: reports start failure (no transfer backend wired yet).
 class GdkDownloader : public IDownloader {

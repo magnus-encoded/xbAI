@@ -14,6 +14,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_executable(xbai_gdk_desktop
     main.cpp
     GdkSocketListener.cpp
+    GdkModelStore.cpp
 )
 
 target_link_libraries(xbai_gdk_desktop PRIVATE xbai_core)
