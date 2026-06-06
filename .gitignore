@@ -16,6 +16,8 @@ xbprobe/xbprobe/redist/*.dll
 xbprobe/thirdparty/
 
 # ── Build output ────────────────────────────────────────────────────────────
+# CMake build tree for core/ + pal/gdk-desktop (out-of-source)
+build/
 xbprobe/xbprobe/AppPackages/
 xbprobe/xbprobe/x64/
 xbprobe/xbprobe/Generated Files/
