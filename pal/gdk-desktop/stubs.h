@@ -5,7 +5,6 @@
 #pragma once
 
 #include "pal/IDashboard.h"
-#include "pal/IDownloader.h"
 #include "pal/IInput.h"
 #include "pal/ILifecycle.h"
 
@@ -23,17 +22,7 @@ public:
 };
 
 // GdkModelStore: real implementation in GdkModelStore.h / GdkModelStore.cpp.
-
-// Downloader stub: reports start failure (no transfer backend wired yet).
-class GdkDownloader : public IDownloader {
-public:
-    bool start(const std::string&, const std::vector<DownloadItem>&,
-               const ProgressCallback&, const DownloadCallback& on_done) override {
-        if (on_done) on_done(false, "GdkDownloader stub: not implemented (P0)");
-        return false;
-    }
-    void cancel() override {}
-};
+// GdkDownloader: real implementation in GdkDownloader.h / GdkDownloader.cpp.
 
 // Input stub: no gamepad polling on the dev-PC harness yet.
 class GdkInput : public IInput {

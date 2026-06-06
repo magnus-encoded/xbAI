@@ -15,9 +15,10 @@ add_executable(xbai_gdk_desktop
     main.cpp
     GdkSocketListener.cpp
     GdkModelStore.cpp
+    GdkDownloader.cpp
 )
 
-target_link_libraries(xbai_gdk_desktop PRIVATE xbai_core)
+target_link_libraries(xbai_gdk_desktop PRIVATE xbai_core Winhttp)
 
 # getenv / Winsock inet_ntop etc. trip MSVC's "secure CRT" deprecations; the
 # uses here are deliberate and bounded.
