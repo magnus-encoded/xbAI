@@ -1,7 +1,6 @@
 // pal/gdk-desktop/GdkSocketListener.cpp
-// Winsock TCP listener implementing core's ISocketListener. P0 walking skeleton:
-// binds a port, runs the accept loop, hands each connection to core as an
-// IConnection byte stream.
+// Winsock TCP listener implementing core's ISocketListener.
+// Full implementation: partial-write loop, TCP_NODELAY, atomic stop flag.
 
 #include "GdkSocketListener.h"
 
@@ -27,14 +26,27 @@ public:
         }
     }
 
+    // Single recv() is correct: the interface contract says "blocks until data is
+    // available" and returns however many bytes arrived. Callers loop themselves.
+    // Returns >0 (bytes read), 0 (orderly close), or -1 (error).
     int read(char* buf, size_t max) override {
         int n = recv(sock_, buf, static_cast<int>(max), 0);
-        return n;  // >0 bytes, 0 orderly close, SOCKET_ERROR(-1) on error
+        // SOCKET_ERROR == -1 on Windows; matches the IConnection contract.
+        return n;
     }
 
+    // Write exactly `len` bytes. Loops on partial sends (critical for SSE chunks).
+    // Returns `len` on full success, or -1 on error.
     int write(const char* buf, size_t len) override {
-        int n = send(sock_, buf, static_cast<int>(len), 0);
-        return n;
+        size_t sent = 0;
+        while (sent < len) {
+            int n = send(sock_, buf + sent, static_cast<int>(len - sent), 0);
+            if (n == SOCKET_ERROR) {
+                return -1;
+            }
+            sent += static_cast<size_t>(n);
+        }
+        return static_cast<int>(sent);
     }
 
     std::string peer() const override { return peer_; }
@@ -49,10 +61,14 @@ private:
 GdkSocketListener::GdkSocketListener() : listen_socket_(INVALID_SOCKET) {}
 
 GdkSocketListener::~GdkSocketListener() {
+    // stop() may have already closed the socket; only close if still open.
     if (listen_socket_ != INVALID_SOCKET) {
         closesocket(static_cast<SOCKET>(listen_socket_));
+        listen_socket_ = INVALID_SOCKET;
     }
-    WSACleanup();
+    if (wsa_started_) {
+        WSACleanup();
+    }
 }
 
 bool GdkSocketListener::listen(uint16_t port, std::string& error) {
@@ -62,6 +78,7 @@ bool GdkSocketListener::listen(uint16_t port, std::string& error) {
         error = "WSAStartup failed: " + std::to_string(rc);
         return false;
     }
+    wsa_started_ = true;
 
     SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (s == INVALID_SOCKET) {
@@ -110,18 +127,28 @@ void GdkSocketListener::run(const ConnectionHandler& on_connection) {
     SOCKET ls = static_cast<SOCKET>(listen_socket_);
     running_ = true;
 
+    // Accept loop. For the single-flight model, on_connection blocks until the
+    // request (including any SSE token stream) is complete. That is intentional:
+    // the inference queue serializes work, so there is never a second concurrent
+    // request to service. The listener socket stays open; accept() has no timeout.
     while (running_) {
-        sockaddr_in peer{};
-        int plen = sizeof(peer);
-        SOCKET client = accept(ls, reinterpret_cast<sockaddr*>(&peer), &plen);
+        sockaddr_in peer_addr{};
+        int plen = sizeof(peer_addr);
+        SOCKET client = accept(ls, reinterpret_cast<sockaddr*>(&peer_addr), &plen);
         if (client == INVALID_SOCKET) {
             if (!running_) break;  // stop() closed the listener -> clean exit
+            // Transient error; keep looping.
             continue;
         }
 
+        // Disable Nagle: flush each SSE chunk immediately without 200 ms delay.
+        BOOL no_delay = TRUE;
+        setsockopt(client, IPPROTO_TCP, TCP_NODELAY,
+                   reinterpret_cast<const char*>(&no_delay), sizeof(no_delay));
+
         char ip[INET_ADDRSTRLEN] = {0};
-        inet_ntop(AF_INET, &peer.sin_addr, ip, sizeof(ip));
-        std::string peer_str = std::string(ip) + ":" + std::to_string(ntohs(peer.sin_port));
+        inet_ntop(AF_INET, &peer_addr.sin_addr, ip, sizeof(ip));
+        std::string peer_str = std::string(ip) + ":" + std::to_string(ntohs(peer_addr.sin_port));
 
         on_connection(std::make_unique<WinsockConnection>(client, std::move(peer_str)));
     }
@@ -130,7 +157,8 @@ void GdkSocketListener::run(const ConnectionHandler& on_connection) {
 void GdkSocketListener::stop() {
     running_ = false;
     if (listen_socket_ != INVALID_SOCKET) {
-        // Closing the listen socket unblocks accept().
+        // Closing the listen socket unblocks the blocking accept() call in run().
+        // run() checks !running_ after accept() returns INVALID_SOCKET and exits.
         closesocket(static_cast<SOCKET>(listen_socket_));
         listen_socket_ = INVALID_SOCKET;
     }

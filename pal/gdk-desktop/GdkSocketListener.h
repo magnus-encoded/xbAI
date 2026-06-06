@@ -5,6 +5,8 @@
 
 #include "pal/ISocketListener.h"
 
+#include <atomic>
+
 namespace xbai {
 
 class GdkSocketListener : public ISocketListener {
@@ -22,7 +24,8 @@ private:
     // need not pull in <windows.h>. Defined in the .cpp.
     unsigned long long listen_socket_;  // SOCKET; INVALID_SOCKET when closed
     uint16_t port_ = 0;
-    volatile bool running_ = false;
+    std::atomic<bool> running_{false};
+    std::atomic<bool> wsa_started_{false};
 };
 
 }  // namespace xbai
