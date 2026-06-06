@@ -11,6 +11,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_library(xbai_core STATIC
     core.cpp
+    model/ModelLocator.cpp
+    model/GenaiConfig.cpp
 )
 
 # Consumers get core/ on their include path, so #include "core.h" and
@@ -32,6 +34,8 @@ target_sources(xbai_core PRIVATE
     pal/IDownloader.h
     pal/IInput.h
     pal/IDashboard.h
+    model/ModelLocator.h
+    model/GenaiConfig.h
 )
 
 if (MSVC)
