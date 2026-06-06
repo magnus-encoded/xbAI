@@ -25,6 +25,7 @@ add_library(xbai_core STATIC
     model/ModelLocator.cpp
     model/GenaiConfig.cpp
     inference/OgaInferenceEngine.cpp
+    server/HttpServer.cpp
 )
 
 # Consumers get core/ on their include path, so #include "core.h" and
@@ -50,6 +51,8 @@ target_sources(xbai_core PRIVATE
     model/GenaiConfig.h
     inference/OgaInferenceEngine.h
     inference/oga_stub.h
+    server/HttpServer.h
+    server/JsonUtils.h
 )
 
 if (XBAI_HAVE_OGA)
