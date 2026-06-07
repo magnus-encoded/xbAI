@@ -100,29 +100,71 @@ Phi-3-mini clears it (a >2 GiB single `.data` would need multi-shard external da
 
 ---
 
-## Backlog (design-resolved, build after the gate clears)
+## Product build — Wave 1: `core/` + `pal/gdk-desktop` (this dev PC, free)
 All four de-risking probes (T1c/T2/T3/T4) **PASS** — the product build is unblocked.
-Build it **portable-by-construction per ADR-0004**: a plain-C++ **`core/`** (zero
-WinRT/GDK headers) over a thin **`pal/`**; language is **C++** (locked).
-- **Product project bootstrap** — new **C++** solution split into `core/` (inference +
-  server + queue, platform-agnostic) and `pal/uwp` (C++/WinRT shell). Define the PAL
-  seam interfaces up front (lifecycle, inbound socket, downloader, storage, UI, gamepad
-  — see ADR-0004 inventory). Reuse `build.ps1`/`deploy.ps1`/signing scaffolding.
-- **Single-flight OpenAI-compatible server** — promote T3's spike into the real
-  FIFO-queued `/v1/chat/completions` with SSE (ADR-0002), living in **`core/`** behind
-  the `pal` inbound-socket interface (UWP `StreamSocketListener` today, Winsock later).
-- **XAML dashboard + single-model press-A flow** — button → download → load → serve →
-  show status/endpoint/usage (CONTEXT #6); the `pal/uwp` UI + gamepad implementation.
-- **KV-cache quantisation** — if T2 shows 4k over budget.
+Build it **portable-by-construction**: a plain-C++ **`core/`** (zero WinRT/GDK headers)
+over a thin **`pal/`** (ADR-0004), language **C++** (locked), each backend native-built
+(ADR-0005), PAL kept minimal with tolerated duplication (ADR-0006). Wave-1 target is
+**`pal/gdk-desktop`** — it runs on this GPU-less Win10 box with no console and no signup
+(see memory `dev-pc-gdk-desktop-harness`). The directory bones exist under `core/` and
+`pal/` (see their `README.md`s).
 
-### Portability / full-metal upgrade path (ADR-0004) — no partner account needed for the first step
-- **`pal/gdk-desktop` validation spike (FREE)** — once `core/` + `pal/uwp` exist, add a
-  second backend on the **public PC GDK** (`microsoft/GDK`, `Gaming.Desktop.x64`, no
-  signup): WinMain+XGameRuntime, Winsock listener, XCurl/libHttpClient download, Win32
-  storage. Proves the GameCore app model + the platform-API swaps **on Windows**,
-  de-risking the console port before any bureaucracy. **Done when:** the same `core/`
-  serves `/v1/chat/completions` as a GameCore Win32 title on a PC.
-- **`pal/gdk-xbox` flip (GATED)** — only when full metal is wanted: ID@Xbox + GDKX +
-  Business Partner Center onboarding, then `Gaming.Xbox.Scarlett.x64` config, raise
-  memory/feature-level targets, optional DirectStorage. `core/` unchanged. **Defer the
-  signup until this step is actually started.**
+> **Shape:** one **serial bootstrap (P0)** that resolves the chicken-and-egg knot, then a
+> **parallel fan** of self-contained "here's what to do / do it" tasks that each implement
+> a frozen seam or core module. The fan tasks are **BLOCKED on P0** (they need the frozen
+> interface signatures) and otherwise independent of each other.
+
+### P0 — Product bootstrap / walking skeleton (the chicken-and-egg task) — **READY FOR AGENT** · critical path · serial
+**Why one big task:** the build topology, the PAL interface signatures, and a skeleton that
+compiles are **mutually dependent** — you can't finalize the interfaces without a skeleton
+that exercises them, can't build the skeleton without the topology, can't pick the topology
+without `core/` existing as a lib. Resolve the knot in one pass; do **not** fan this out.
+**Do:**
+1. **Toolchain check** — install/verify the public GDK (`aka.ms/gdk` / NuGet
+   `Microsoft.GDK.PC`) + Win11 SDK (22000+) on this Win10 host; confirm a
+   `Gaming.Desktop.x64` build works (mirror the `build.ps1` "pick the right MSBuild" care).
+2. **`core/` as a static lib** (ADR-0005) — minimal buildable lib (CMake encouraged), empty
+   but linkable, zero WinRT/GDK includes.
+3. **Freeze the seam signatures** in `core/pal/` — write the **minimal** interfaces forced by
+   the metal (`ILifecycle`, `ISocketListener`, `IModelStore`, `IDownloader`, `IInput`,
+   `IDashboard` — shrink per ADR-0006 §1) plus the core-internal contracts the fan needs to
+   compose (inference-engine interface, request/response types, model-locator). These become
+   **the contract**; changing a signature after P0 requires coordination.
+4. **Walking skeleton** — `pal/gdk-desktop`: `WinMain` + `XGameRuntimeInitialize`, a Winsock
+   `ISocketListener` that accepts a connection and returns a **canned HTTP `200`**, linking
+   the `core/` lib (core may no-op). Proves topology + contract end-to-end on this box.
+**Done when:** `pal/gdk-desktop` builds and runs on the dev PC, `curl` against it gets `200`;
+`core/` links as a lib; the `core/pal/` interface headers are committed and declared frozen.
+**Unblocks:** every Wave-1 fan task below.
+
+### Wave-1 fan (each self-contained; **BLOCKED on P0**, then **READY FOR AGENT**)
+Each codes against the frozen headers; per ADR-0006 they don't share abstractions, so they
+don't collide. `core-*` are platform-agnostic; `pal-gdkdesktop-*` implement seams.
+- **core-model** — model-dir layout, `genai_config.json` parse, model-id → path. *(start
+  first; core-inference depends on its path contract.)* Home: `core/model/`.
+- **core-inference** — OGA C-API wrapper: load from path, decode loop, yield tokens; behind
+  the inference-engine interface. Validate with a **tiny** ONNX on this box (not 2 GB Phi-3).
+  Home: `core/inference/`.
+- **core-server** — HTTP/1.1 + OpenAI `/v1/chat/completions` + SSE over `ISocketListener`.
+  Home: `core/server/`.
+- **core-queue** — single-flight FIFO + lifecycle, owns the decode worker thread, 429/503 on
+  overflow; wires server → inference. Home: `core/queue/`.
+- **pal-gdkdesktop-socket** — promote the P0 Winsock stub to the full `ISocketListener`
+  (streaming bodies for SSE, multiple connections). Home: `pal/gdk-desktop/`.
+- **pal-gdkdesktop-storage** — `IModelStore` via Win32 paths (model root on disk). Home:
+  `pal/gdk-desktop/`.
+- **pal-gdkdesktop-downloader** — `IDownloader` (WinHTTP or XCurl/libHttpClient): resumable
+  file-set fetch with progress. Home: `pal/gdk-desktop/`.
+- **pal-gdkdesktop-shell** — `ILifecycle` (XGameRuntime PLM), `IInput` (GameInput press-A),
+  `IDashboard` (status output — log/console first, D3D overlay later). Home: `pal/gdk-desktop/`.
+
+### Later waves (not this batch)
+- **`pal/uwp` backend** — the console v1 ship (ADR-0003): C++/WinRT + XAML mirrors of the
+  seams (StreamSocketListener / BackgroundDownloader / ApplicationData / Windows.Gaming.Input,
+  XAML dashboard + press-A), MSBuild/appx via `build.ps1` + signing. Implemented independently
+  of gdk-desktop (ADR-0006 §3); all already de-risked by `xbprobe` (T2/T3/T4). Home: `pal/uwp/`.
+- **KV-cache quantisation** — if 4k context is over the 4.05 GiB budget (CONTEXT math).
+- **`pal/gdk-xbox` flip (GATED)** — full metal: ID@Xbox + GDKX + Business Partner Center, then
+  `Gaming.Xbox.Scarlett.x64`, lifted memory/feature-level, optional DirectStorage. `core/`
+  unchanged. The residual risk lives here, not in the PAL: does the stock ORT stack load on the
+  Xbox Game OS. **Defer the signup until this step is actually started.** Home: `pal/gdk-xbox/`.
